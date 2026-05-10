@@ -1,13 +1,27 @@
 import os
 import re
 import json
+import threading
+from flask import Flask
 from telebot import TeleBot
 from telebot.types import InlineKeyboardMarkup, InlineKeyboardButton
 
+# Flask web server
+app_flask = Flask(__name__)
+
+@app_flask.route('/')
+def home():
+    return "Bot is running! ✅"
+
+def run_flask():
+    app_flask.run(host='0.0.0.0', port=8080)
+
+threading.Thread(target=run_flask).start()
+
+# Bot setup
 BOT_TOKEN = os.environ.get('BOT_TOKEN')
 bot = TeleBot(BOT_TOKEN)
 
-# Data file သိမ်းဖို့
 DATA_FILE = "orders.json"
 
 def load_orders():
@@ -21,7 +35,7 @@ def save_orders(data):
         json.dump(data, f)
 
 def is_mlbb_format(text):
-    pattern = r'^\d+\(\d+\)[Dd][Ii][Aa]\d+$'
+    pattern = r'^\d+\(\d+\)\s*[Dd][Ii][Aa]\d+$'
     return bool(re.match(pattern, text.strip()))
 
 def make_keyboard(text):
@@ -37,6 +51,14 @@ def make_keyboard(text):
     markup.add(copy_btn, delete_btn)
     return markup
 
+@bot.message_handler(commands=['start'])
+def start(message):
+    bot.reply_to(
+        message,
+        "👋 *MLBB Dia Bot へようこそ!*\n\nOrder format:\n`12345432(1372)dia878`\n\nဒီ format နဲ့ ပို့ပါ ✅",
+        parse_mode='Markdown'
+    )
+
 @bot.message_handler(func=lambda msg: True)
 def handle_message(message):
     text = message.text.strip()
@@ -50,7 +72,6 @@ def handle_message(message):
     if chat_id not in orders:
         orders[chat_id] = []
 
-    # ပြေစာတူ စစ်
     if text.lower() in [o.lower() for o in orders[chat_id]]:
         bot.reply_to(
             message,
@@ -59,11 +80,9 @@ def handle_message(message):
         )
         return
 
-    # သိမ်းထား
     orders[chat_id].append(text)
     save_orders(orders)
 
-    # ပြန်ပို့
     bot.send_message(
         message.chat.id,
         f"✅ *MLBB Dia Order*\n\n`{text}`\n\n⬇️ အောက်က button နှိပ်ပါ",
@@ -77,13 +96,12 @@ def handle_callback(call):
 
     if data.startswith("copy|"):
         text = data.split("|", 1)[1]
-        # Copy message ပို့
         bot.send_message(
             call.message.chat.id,
             f"`{text}`",
             parse_mode='Markdown'
         )
-        bot.answer_callback_query(call.id, "📋 Copy လုပ်ပြီး message ပို့ပြီ!")
+        bot.answer_callback_query(call.id, "📋 Copy လုပ်ပြီး!")
 
     elif data == "delete":
         bot.delete_message(
